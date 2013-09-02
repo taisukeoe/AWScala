@@ -114,6 +114,28 @@ https://github.com/seratch/awscala/blob/master/src/main/scala/awscala/ec2/EC2.sc
 
 https://github.com/seratch/awscala/blob/master/src/test/scala/awscala/EC2Spec.scala
 
+### Amazon Elastic Beanstalk
+
+```scala
+import awscala._, beanstalk._
+
+implicit val beanstalk = Beanstalk.at(Region.Tokyo)
+
+val existings: Seq[Application] = beanstalk.applications
+
+// create a sample application with Amazon Linux Tomcat 7 64bit environment
+val application:Application = beanstalk.createApplication("your-application-name")
+
+val f = Future(beanstalk.createAndAwaitEnvironment("unique-name-xxx"))
+
+for {
+  environment <- f
+} {
+  environment.url // http://unique-name-xxx.elasticbeanstalk.com/
+  environment.destroy()
+}
+```
+
 
 ### Amazon Simple Storage Service (Amazon S3)
 

@@ -26,6 +26,8 @@ class Application(underlying: aws.model.ApplicationDescription) {
 
   def createEnvironment(name: String)(implicit beanstalk: Beanstalk): Environment = beanstalk.createEnvironment(this, name)
 
+  def createAndAwaitEnvironment(name: String)(implicit beanstalk: Beanstalk): Environment = beanstalk.createEnvironment(this, name)
+
   def destroy()(implicit beanstalk: Beanstalk): Unit = beanstalk.delete(this)
 
   override def toString: String = s"Application ${underlying.toString}"

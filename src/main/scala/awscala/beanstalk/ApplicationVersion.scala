@@ -32,6 +32,8 @@ class ApplicationVersion(underlying: aws.model.ApplicationVersionDescription) {
 
   def createEnvironment(name: String)(implicit beanstalk: Beanstalk): Environment = beanstalk.createEnvironment(this, name)
 
+  def createAndAwaitEnvironment(name: String)(implicit beanstalk: Beanstalk): Environment = beanstalk.createAndAwaitEnvironment(this, name)
+
   def destroy()(implicit beanstalk: Beanstalk): Unit = beanstalk.delete(this)
 
   override def toString: String = s"ApplicationVersion ${underlying.toString}"

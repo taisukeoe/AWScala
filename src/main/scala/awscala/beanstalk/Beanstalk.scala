@@ -17,6 +17,10 @@ object Beanstalk {
 
 trait Beanstalk extends aws.AWSElasticBeanstalk {
 
+  val CHECK_INTERVAL = 5000L
+
+  implicit protected val context = this
+
   def at(region: Region): Beanstalk = {
     this.setRegion(region)
     this
@@ -89,33 +93,68 @@ trait Beanstalk extends aws.AWSElasticBeanstalk {
     Environment(createEnvironment(
       new aws.model.CreateEnvironmentRequest().withApplicationName(application.name)
         .withEnvironmentName(environmentName)
-        .withSolutionStackName("64bit Amazon Linux running Tomcat 7")
+        .withSolutionStackName(AmazonLinux64Tomcat7.name)
     ))
 
   def createEnvironment(applicationVersion: ApplicationVersion,
     environmentName: String): Environment =
-    Environment(createEnvironment(
-      new aws.model.CreateEnvironmentRequest().withApplicationName(applicationVersion.applicationName)
-        .withVersionLabel(applicationVersion.versionLabel)
-        .withEnvironmentName(environmentName)
-        .withSolutionStackName("64bit Amazon Linux running Tomcat 7")
-    ))
+    createEnvironment(applicationVersion.applicationName,
+      applicationVersion.versionLabel,
+      environmentName,
+      environmentName,
+      AmazonLinux64Tomcat7,
+      Nil)
 
   def createEnvironment(applicationName: String,
     versionLabel: String,
     environmentName: String,
     cnamePrefix: String,
-    solutionStackName: String = "64bit Amazon Linux running Tomcat 7",
-    template: String = null,
-    confs: Seq[Configuration]): Environment =
-    Environment(createEnvironment(
-      new aws.model.CreateEnvironmentRequest().withApplicationName(applicationName)
-        .withVersionLabel(versionLabel)
-        .withEnvironmentName(environmentName)
-        .withCNAMEPrefix(cnamePrefix)
-        .withSolutionStackName(solutionStackName)
-        .withTemplateName(template)
-        .withOptionSettings(confs.asJava)))
+    base: EnvironmentBase = AmazonLinux64Tomcat7,
+    confs: Seq[Configuration]): Environment = {
+    val rawReq = new aws.model.CreateEnvironmentRequest().withApplicationName(applicationName)
+      .withVersionLabel(versionLabel)
+      .withEnvironmentName(environmentName)
+      .withCNAMEPrefix(cnamePrefix)
+      .withOptionSettings(confs.asJava)
+
+    //Either SolutionStackName or TemplateName must be specified.
+    val req = base match {
+      case SolutionStack(value) => rawReq.withSolutionStackName(value)
+      case Template(value) => rawReq.withTemplateName(value)
+    }
+    Environment(createEnvironment(req))
+  }
+
+  def createAndAwaitEnvironment(application: Application,
+    environmentName: String): Environment = {
+    val env = createEnvironment(application, environmentName)
+    while (env.Latest.status != Ready) {
+      Thread.sleep(CHECK_INTERVAL)
+    }
+    env
+  }
+
+  def createAndAwaitEnvironment(applicationVersion: ApplicationVersion,
+    environmentName: String): Environment =
+    createAndAwaitEnvironment(applicationVersion.applicationName,
+      applicationVersion.versionLabel,
+      environmentName,
+      environmentName,
+      AmazonLinux64Tomcat7,
+      Nil)
+
+  def createAndAwaitEnvironment(applicationName: String,
+    versionLabel: String,
+    environmentName: String,
+    cnamePrefix: String,
+    base: EnvironmentBase = AmazonLinux64Tomcat7,
+    confs: Seq[Configuration]): Environment = {
+    val env = createEnvironment(applicationName, versionLabel, environmentName, cnamePrefix, base, confs)
+    while (env.Latest.status != Ready) {
+      Thread.sleep(CHECK_INTERVAL)
+    }
+    env
+  }
 
   def restart(env: Environment): Unit = restartEnvironment(env.environmentName)
 
@@ -129,14 +168,19 @@ trait Beanstalk extends aws.AWSElasticBeanstalk {
 
   def swapCNAMEs(sourceEnvironmentName: String, destinationEnvironmentName: String): Unit = swapEnvironmentCNAMEs(new aws.model.SwapEnvironmentCNAMEsRequest().withSourceEnvironmentName(sourceEnvironmentName).withDestinationEnvironmentName(destinationEnvironmentName))
 
-  // This cannot update application version and configuration together.
-  def update(environment: Environment, confs: Configuration*): UpdateEnvironmentResult = updateEnvironment(environment.environmentName, null, confs: _*)
+  // Environment cannot be updated in application version and configuration together.
+
+  def update(environment: Environment, confs: Configuration*): UpdateEnvironmentResult = updateEnvironment(environment.environmentName, confs: _*)
 
   def update(environment: Environment, versionLabel: String): UpdateEnvironmentResult = updateEnvironment(environment.environmentName, versionLabel)
 
-  def updateEnvironment(environmentName: String, versionLabel: String, confs: Configuration*): UpdateEnvironmentResult =
+  def updateEnvironment(environmentName: String, confs: Configuration*): UpdateEnvironmentResult =
     UpdateEnvironmentResult(updateEnvironment(
-      new aws.model.UpdateEnvironmentRequest().withEnvironmentName(environmentName).withVersionLabel(versionLabel).withOptionSettings(confs: _*)))
+      new aws.model.UpdateEnvironmentRequest().withEnvironmentName(environmentName).withOptionSettings(confs: _*)))
+
+  def updateEnvironment(environmentName: String, versionLabel: String): UpdateEnvironmentResult =
+    UpdateEnvironmentResult(updateEnvironment(
+      new aws.model.UpdateEnvironmentRequest().withEnvironmentName(environmentName).withVersionLabel(versionLabel)))
 
   def terminate(environment: Environment): Unit = terminateEnvironment(new aws.model.TerminateEnvironmentRequest().withEnvironmentName(environment.environmentName))
 
